@@ -10,16 +10,25 @@ More specifically, AutoTheta is capable of the following:
 * To use simple validation criteria to select the most appropriate model, out of all possible ones, and use such a model to predict each time series.
 * To use a formula for estimating the corresponding prediction intervals, based on the residuals of the selected model and the frequency (number of the periods within a seasonal cycle) of the series to be predicted.
 
+
 Example of use
+
 AutoTheta is developed in R and can be used for forecasting a ts() object as follows:
 
 library(Mcomp)
+
 tsi=1100
+
 time_series <- subset(M3, 12)[[tsi]]
+
 frc <- AutoTheta(time_series$x, fh=18, positive=TRUE)
+
 plot(time_series)
+
 lines(frc$mean, col="blue")
+
 lines(frc$piu, col="blue") 
+
 lines(frc$pil, col="blue")
 
 
