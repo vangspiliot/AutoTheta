@@ -19,7 +19,7 @@ time_series <- subset(M3, 12)[[tsi]]
 frc <- AutoTheta(time_series$x, fh=18, positive=TRUE)
 plot(time_series)
 lines(frc$mean, col="blue")
-lines(frc$piu, col="blue")
+lines(frc$piu, col="blue") 
 lines(frc$pil, col="blue")
 
 
