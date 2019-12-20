@@ -1,0 +1,201 @@
+SeasonalityTest <- function(input, ppy){
+  tcrit <- 1.645
+  if (length(input)<3*ppy){
+    test_seasonal <- FALSE
+  }else{
+    xacf <- acf(input, plot = FALSE)$acf[-1, 1, 1]
+    clim <- tcrit/sqrt(length(input)) * sqrt(cumsum(c(1, 2 * xacf^2)))
+    test_seasonal <- ( abs(xacf[ppy]) > clim[ppy] )
+    
+    if (is.na(test_seasonal)==TRUE){ test_seasonal <- FALSE }
+  }
+  return(test_seasonal)
+}
+
+Theta.models.fit <- function(input, fh, theta, curve, model, seasonality , plot=FALSE, positive=TRUE){
+  #Check if the inputs are valid
+  if (theta<1){ theta <- 1}
+  if (fh<1){ fh <- 1}
+  #Estimate theta line weights
+  outtest <- naive(input, h=fh)$mean
+  wses <- (1/theta) ; wlrl <- (1-wses)
+  #Estimate seasonaly adjusted time series
+  ppy <- frequency(input)
+  if (seasonality=="N"){
+    des_input <- input ; SIout <- rep(1, fh) ; SIin <- rep(1, length(input))
+  }else if (seasonality=="A"){
+    Dec <- decompose(input, type="additive")
+    des_input <- input-Dec$seasonal 
+    SIin <- Dec$seasonal
+    SIout <- head(rep(Dec$seasonal[(length(Dec$seasonal)-ppy+1):length(Dec$seasonal)], fh), fh)
+  }else{
+    Dec <- decompose(input, type="multiplicative")
+    des_input <- input/Dec$seasonal 
+    SIin <- Dec$seasonal
+    SIout <- head(rep(Dec$seasonal[(length(Dec$seasonal)-ppy+1):length(Dec$seasonal)], fh), fh)
+  }
+  
+  #Estimate theta line zero
+  observations <- length(des_input)
+  xs <- c(1:observations)
+  xf = xff <- c((observations+1):(observations+fh))
+  dat=data.frame(des_input=des_input, xs=xs)
+  newdf <- data.frame(xs = xff)
+  
+  if (curve=="Exp"){
+    estimate <- lm(log(des_input)~xs)
+    thetaline0In <- exp(predict(estimate))+input-input
+    thetaline0Out <- exp(predict(estimate, newdf))+outtest-outtest
+  }else{
+    estimate <- lm(des_input ~ poly(xs, 1, raw=TRUE))
+    thetaline0In <- predict(estimate)+des_input-des_input
+    thetaline0Out <- predict(estimate, newdf)+outtest-outtest
+  }
+  
+  #Estimete Theta line (theta)
+  if (model=="A"){
+    thetalineT <- theta*des_input+(1-theta)*thetaline0In
+  }else{
+    thetalineT <- (des_input^theta)*(thetaline0In^(1-theta))
+  }
+  
+  #forecasting TL2
+  sesmodel <- ses(thetalineT, h=fh)
+  thetaline2In <- sesmodel$fitted
+  thetaline2Out <- sesmodel$mean
+  
+  #Theta forecasts
+  if (model=="A"){
+    forecastsIn <- as.numeric(thetaline2In*wses)+as.numeric(thetaline0In*wlrl)+des_input-des_input
+    forecastsOut <- as.numeric(thetaline2Out*wses)+as.numeric(thetaline0Out*wlrl)+outtest-outtest
+  }else{
+    forecastsIn <- ((as.numeric(thetaline2In)^(1/theta))*(as.numeric(thetaline0In)^(1-(1/theta))))+des_input-des_input
+    forecastsOut <- ((as.numeric(thetaline2Out)^(1/theta))*(as.numeric(thetaline0Out)^(1-(1/theta))))+outtest-outtest
+  }
+  
+  #Seasonal adjustments
+  if (seasonality=="A"){
+    forecastsIn <- forecastsIn+SIin
+    forecastsOut <- forecastsOut+SIout
+  }else{
+    forecastsIn <- forecastsIn*SIin
+    forecastsOut <- forecastsOut*SIout
+  }
+  
+  #Zero forecasts become positive
+  if (positive==T){
+    for (i in 1:length(forecastsOut)){
+      if (forecastsOut[i]<0){ forecastsOut[i] <- 0 }
+    }
+  }
+  
+  if (plot==TRUE){
+    united <- cbind(input,forecastsOut)
+    for (ik in 1:(observations+fh)){ united[ik,1] = sum(united[ik,2],united[ik,1], na.rm = TRUE) }
+    plot(united[,1],col="black",type="l",main=paste("Model:",model,",Curve:",curve,",Theta:",theta),xlab="Time",ylab="Values",
+         ylim=c(min(united[,1])*0.85,max(united[,1])*1.15))
+    lines(forecastsIn, col="green") ; lines(forecastsOut, col="green")
+    lines(thetaline2In, col="blue") ; lines(thetaline2Out, col="blue")
+    lines(thetaline0In, col="red") ; lines(thetaline0Out, col="red")
+  }
+  
+  output=list(fitted=forecastsIn,mean=forecastsOut,
+              fitted0=thetaline0In,mean0=thetaline0Out,
+              fitted2=thetaline2In,mean2=thetaline2Out,
+              model=paste(seasonality,model,curve,
+                          c(round(theta,2)),
+                          round(sesmodel$model$par[1],3),
+                          round(sesmodel$model$par[2],3)))
+  
+  return(output)
+}
+
+AutoTheta<- function(input, fh, positive=TRUE){
+  
+  if (min(input)>0){
+    molist <- c("M","A") ; trlist <- c("Lrl","Exp")
+  }else{
+    molist <- c("A") ; trlist <- c("Lrl")
+  }
+  #Scale
+  base <- mean(input) ; input <- input/base
+  
+  #Check seasonality & Create list of models
+  ppy <- frequency(input) ; ST <- F
+  if (ppy>1){ ST <- SeasonalityTest(input, ppy) }
+  if (ST==T){
+    
+    selist <- c("M","A")
+    listnames <- c()
+    for (i in 1:length(selist)){
+      for (ii in 1:length(molist)){
+        for (iii in 1:length(trlist)){
+          listnames <- c(listnames,paste(selist[i], molist[ii], trlist[iii]))
+        }
+      }
+    }
+    
+  }else{
+    
+    listnames <- c()
+    for (ii in 1:length(molist)){
+      for (iii in 1:length(trlist)){
+        listnames <- c(listnames, paste("N", molist[ii], trlist[iii]))
+      }
+    }
+    
+  }
+  #Exclude instable models
+  excluded <- c("N M Lrl", "A M Lrl", "A M Exp", "M M Lrl")
+  listnames <- listnames[!(listnames %in% excluded)]
+  modellist <- NULL
+  for (i in 1:length(listnames)){
+    modellist[length(modellist)+1] <- list(c(substr(listnames,1,1)[i], substr(listnames,3,3)[i],
+                                             substr(listnames,5,7)[i]))
+  }
+  
+  #Start validation
+  errorsin <- c() ; models <- NULL
+  
+  #With this function determine opt theta per case
+  optfun <- function(x, input, fh, curve, model, seasonality){
+    mean(abs(Theta.models.fit(input=input, fh, theta=x, curve, model, seasonality , plot=FALSE)$fitted-input))
+  }
+  
+  for (j in 1:length(listnames)){
+    optTheta <- suppressWarnings(optimize(optfun, c(1:3), 
+                                          input=input, fh=fh, curve=modellist[[j]][3], model=modellist[[j]][2], 
+                                          seasonality=modellist[[j]][1])$minimum)
+    
+    fortheta <- Theta.models.fit(input=input, fh=fh, theta=optTheta, curve=modellist[[j]][3], model=modellist[[j]][2], 
+                                 seasonality=modellist[[j]][1], plot=F)
+    models[length(models)+1] <- list(fortheta)
+    errorsin <- c(errorsin, mean(abs(input-fortheta$fitted)))
+  }
+  
+  #Select model and export
+  selected.model <- models[[which.min(errorsin)]]
+  description <- selected.model$model
+  
+  #Estimate Prediction Intervals
+  frc <- selected.model$mean*base
+  fitted <- selected.model$fitted*base
+  residuals_t <- as.numeric(input*base-fitted)
+  
+  if (frequency(input)==1){
+    m <- 12
+  }else if (frequency(input)==4){
+    m <- 4
+  }else{
+    m <- 1
+  }
+  
+  pisl <- frc-1.960*sd(residuals_t)*sqrt(1+m*(c(1:fh)-1))
+  pisu <- frc+1.960*sd(residuals_t)*sqrt(1+m*(c(1:fh)-1))
+  if (positive==T){
+    pisl[pisl<0] <- 0 ; pisu[pisu<0] <- 0
+  }
+  output <- list(fitted=fitted, mean=frc, description=description, piu=pisu, pil=pisl) 
+  
+  return(output)
+}
