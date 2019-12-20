@@ -11,7 +11,7 @@ More specifically, AutoTheta is capable of the following:
 * To use a formula for estimating the corresponding prediction intervals, based on the residuals of the selected model and the frequency (number of the periods within a seasonal cycle) of the series to be predicted.
 
 
-Example of use
+# Example of use
 
 AutoTheta is developed in R and can be used for forecasting a ts() object as follows:
 
@@ -32,6 +32,7 @@ lines(frc$piu, col="blue")
 lines(frc$pil, col="blue")
 
 
-References
-Assimakopoulos, V., & Nikolopoulos, K. (2000). The theta model: a decomposition approach to forecasting.International Journal of Forecasting, 16, 521–530
-Spiliotis, E., Assimakopoulos, V., & Nikolopoulos, K. (2019).  Forecasting with a hybrid method utilizingdata smoothing, a variation of the theta method and shrinkage of seasonal factors. International Journal of Production Economics, 209, 92–102
+# References
+
+* Assimakopoulos, V., & Nikolopoulos, K. (2000). The theta model: a decomposition approach to forecasting.International Journal of Forecasting, 16, 521–530
+* Spiliotis, E., Assimakopoulos, V., & Nikolopoulos, K. (2019).  Forecasting with a hybrid method utilizingdata smoothing, a variation of the theta method and shrinkage of seasonal factors. International Journal of Production Economics, 209, 92–102
